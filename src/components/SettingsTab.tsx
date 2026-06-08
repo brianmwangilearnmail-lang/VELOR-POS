@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   Settings, 
   Save, 
@@ -49,7 +49,12 @@ export default function SettingsTab({
   const [gmailAppPassword, setGmailAppPassword] = useState(settings.gmailAppPassword || '');
 
   const [isGmailModalOpen, setIsGmailModalOpen] = useState(false);
-  const [savedFeedback, setSavedFeedback] = useState(false);
+  const [toast, setToast] = useState<{ message: string; type: 'success' | 'info' } | null>(null);
+
+  const showToast = (message: string, type: 'success' | 'info' = 'success') => {
+    setToast({ message, type });
+    setTimeout(() => setToast(null), 3500);
+  };
 
   const handleSettingsSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -67,11 +72,7 @@ export default function SettingsTab({
     };
 
     onSaveSettings(updatedSettings);
-    
-    setSavedFeedback(true);
-    setTimeout(() => {
-      setSavedFeedback(false);
-    }, 3000);
+    showToast('Store configurations saved successfully!');
   };
 
   const handleResetTrigger = () => {
@@ -115,12 +116,6 @@ export default function SettingsTab({
         </div>
       </div>
 
-      {savedFeedback && (
-        <div className="p-4 bg-emerald-950/40 border-2 border-emerald-900/40 text-emerald-400 text-xs rounded-xl flex items-center gap-2 font-semibold">
-          <CheckCircle2 className="h-4.5 w-4.5 text-emerald-400 shrink-0" />
-          <span>General store terminal configurations saved! Checkout receipts will reflect updates instantly.</span>
-        </div>
-      )}
 
       {/* Main Settings Form */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
@@ -419,7 +414,7 @@ export default function SettingsTab({
               </button>
               <button
                 type="button"
-                onClick={() => setIsGmailModalOpen(false)}
+                onClick={() => { setIsGmailModalOpen(false); showToast('Gmail account connected! Receipts will now be sent via your Gmail.', 'success'); }}
                 className="px-5 py-2 bg-teal-500 hover:bg-teal-400 text-slate-950 text-xs font-bold rounded-xl transition-colors shadow-md"
               >
                 Confirm Password
@@ -427,6 +422,38 @@ export default function SettingsTab({
             </div>
 
           </div>
+        </div>
+      )}
+
+      {/* FIXED TOAST NOTIFICATION */}
+      {toast && (
+        <div
+          className="fixed bottom-6 right-6 z-[9999] flex items-center gap-3 px-5 py-4 rounded-2xl shadow-2xl border animate-in fade-in slide-in-from-bottom-4 duration-300"
+          style={{
+            background: toast.type === 'success' ? 'linear-gradient(135deg, #052e16 0%, #064e3b 100%)' : 'linear-gradient(135deg, #1e1b4b 0%, #1e3a5f 100%)',
+            borderColor: toast.type === 'success' ? '#059669' : '#3b82f6',
+            minWidth: '280px',
+            maxWidth: '380px',
+          }}
+        >
+          <div
+            className="shrink-0 h-8 w-8 rounded-full flex items-center justify-center"
+            style={{ background: toast.type === 'success' ? '#059669' : '#3b82f6' }}
+          >
+            <CheckCircle2 className="h-4.5 w-4.5 text-white" />
+          </div>
+          <div className="flex-1">
+            <p className="text-xs font-bold text-white">Settings Updated</p>
+            <p className="text-[11px] mt-0.5" style={{ color: toast.type === 'success' ? '#6ee7b7' : '#93c5fd' }}>
+              {toast.message}
+            </p>
+          </div>
+          <button
+            onClick={() => setToast(null)}
+            className="shrink-0 text-slate-400 hover:text-white transition-colors ml-2"
+          >
+            <X className="h-4 w-4" />
+          </button>
         </div>
       )}
 
