@@ -6,7 +6,7 @@
 import React, { useState, useEffect } from 'react';
 import { Product, Receipt, ReturnRecord, StoreSettings, UserAccount } from './types';
 import { INITIAL_PRODUCTS, INITIAL_RECEIPTS, DEFAULT_STORE_SETTINGS } from './data';
-
+import { api } from './lib/api';
 // Subcomponents
 import LoginScreen from './components/LoginScreen';
 import Sidebar from './components/Sidebar';
@@ -38,125 +38,44 @@ export default function App() {
 
   const [oneOffReceiptToInspect, setOneOffReceiptToInspect] = useState<Receipt | null>(null);
 
-  // 1. Load starting states from LocalStorage or default fallback seeds
+  // 1. Load starting states from Supabase or fallback
   useEffect(() => {
-    // Current User
     const cachedUser = localStorage.getItem(LOCAL_STORAGE_KEYS.USER);
     if (cachedUser) {
-      try {
-        setCurrentUser(JSON.parse(cachedUser));
-      } catch (e) {
-        console.error('Failed reading user cache', e);
-      }
+      try { setCurrentUser(JSON.parse(cachedUser)); } catch (e) {}
     }
 
-    // Store settings parameters
     const cachedSettings = localStorage.getItem(LOCAL_STORAGE_KEYS.SETTINGS);
     if (cachedSettings) {
       try {
         const parsed: StoreSettings = JSON.parse(cachedSettings);
-        // Force settings to Kenya Shillings (KSh)
         parsed.currencySymbol = 'KSh';
-        if (parsed.taxRatePercentage === 8.5) {
-          parsed.taxRatePercentage = 16;
-        }
+        if (parsed.taxRatePercentage === 8.5) parsed.taxRatePercentage = 16;
         setSettings(parsed);
-        localStorage.setItem(LOCAL_STORAGE_KEYS.SETTINGS, JSON.stringify(parsed));
       } catch (e) {
         setSettings(DEFAULT_STORE_SETTINGS);
       }
     } else {
       setSettings(DEFAULT_STORE_SETTINGS);
-      localStorage.setItem(LOCAL_STORAGE_KEYS.SETTINGS, JSON.stringify(DEFAULT_STORE_SETTINGS));
     }
 
-    // Products Catalog
-    const cachedProducts = localStorage.getItem(LOCAL_STORAGE_KEYS.PRODUCTS);
-    if (cachedProducts) {
+    const loadFromDb = async () => {
       try {
-        const parsed: Product[] = JSON.parse(cachedProducts);
-        // If there's a product with low prices (indicating past USD default), convert or restore KSh seed values
-        const hasLowPrices = parsed.some(p => p.sellingPrice < 200);
-        if (hasLowPrices) {
-          const migrated = parsed.map(p => {
-            const initialMatch = INITIAL_PRODUCTS.find(initP => initP.id === p.id || initP.name.toLowerCase() === p.name.toLowerCase());
-            if (initialMatch) {
-              return {
-                ...p,
-                costPrice: initialMatch.costPrice,
-                sellingPrice: initialMatch.sellingPrice,
-                imageUrl: p.imageUrl || initialMatch.imageUrl
-              };
-            } else {
-              // Convert custom products by factor of 130
-              return {
-                ...p,
-                costPrice: Math.round(p.costPrice * 130),
-                sellingPrice: Math.round(p.sellingPrice * 130)
-              };
-            }
-          });
-          setProducts(migrated);
-          localStorage.setItem(LOCAL_STORAGE_KEYS.PRODUCTS, JSON.stringify(migrated));
-        } else {
-          setProducts(parsed);
-        }
-      } catch (e) {
-        setProducts(INITIAL_PRODUCTS);
-      }
-    } else {
-      setProducts(INITIAL_PRODUCTS);
-      localStorage.setItem(LOCAL_STORAGE_KEYS.PRODUCTS, JSON.stringify(INITIAL_PRODUCTS));
-    }
+        const dbProducts = await api.getProducts();
+        if (dbProducts.length > 0) setProducts(dbProducts);
+        else setProducts(INITIAL_PRODUCTS);
 
-    // Receipts Historical Ledger
-    const cachedReceipts = localStorage.getItem(LOCAL_STORAGE_KEYS.RECEIPTS);
-    if (cachedReceipts) {
-      try {
-        const parsed: Receipt[] = JSON.parse(cachedReceipts);
-        const hasUsdTotals = parsed.some(r => r.grandTotal < 500);
-        if (hasUsdTotals) {
-          const migrated = parsed.map(r => {
-            const matchInitial = INITIAL_RECEIPTS.find(initR => initR.receiptNumber === r.receiptNumber);
-            if (matchInitial) {
-              return matchInitial;
-            } else {
-              return {
-                ...r,
-                subtotal: Math.round(r.subtotal * 130),
-                discountTotal: Math.round(r.discountTotal * 130),
-                taxTotal: Math.round(r.taxTotal * 130),
-                grandTotal: Math.round(r.grandTotal * 130),
-                items: r.items.map(item => ({
-                  ...item,
-                  unitPrice: Math.round(item.unitPrice * 130),
-                  finalPrice: Math.round(item.finalPrice * 130)
-                }))
-              };
-            }
-          });
-          setReceipts(migrated);
-          localStorage.setItem(LOCAL_STORAGE_KEYS.RECEIPTS, JSON.stringify(migrated));
-        } else {
-          setReceipts(parsed);
-        }
-      } catch (e) {
-        setReceipts(INITIAL_RECEIPTS);
-      }
-    } else {
-      setReceipts(INITIAL_RECEIPTS);
-      localStorage.setItem(LOCAL_STORAGE_KEYS.RECEIPTS, JSON.stringify(INITIAL_RECEIPTS));
-    }
+        const dbReceipts = await api.getReceipts();
+        setReceipts(dbReceipts.length > 0 ? dbReceipts : INITIAL_RECEIPTS);
 
-    // Returns register
-    const cachedReturns = localStorage.getItem(LOCAL_STORAGE_KEYS.RETURNS);
-    if (cachedReturns) {
-      try {
-        setReturnLedgerHistory(JSON.parse(cachedReturns));
-      } catch (e) {
-        setReturnLedgerHistory([]);
+        const dbReturns = await api.getReturns();
+        setReturnLedgerHistory(dbReturns);
+      } catch (err) {
+        console.error('Error loading data from Supabase:', err);
       }
-    }
+    };
+    
+    loadFromDb();
   }, []);
 
   // Update tabs selection automatically when roles change
@@ -173,17 +92,15 @@ export default function App() {
   // Save utility wrappers
   const saveProductsToStorage = (updatedList: Product[]) => {
     setProducts(updatedList);
-    localStorage.setItem(LOCAL_STORAGE_KEYS.PRODUCTS, JSON.stringify(updatedList));
+    api.saveProducts(updatedList);
   };
 
   const saveReceiptsToStorage = (updatedList: Receipt[]) => {
     setReceipts(updatedList);
-    localStorage.setItem(LOCAL_STORAGE_KEYS.RECEIPTS, JSON.stringify(updatedList));
   };
 
   const saveReturnsToStorage = (updatedList: ReturnRecord[]) => {
     setReturnLedgerHistory(updatedList);
-    localStorage.setItem(LOCAL_STORAGE_KEYS.RETURNS, JSON.stringify(updatedList));
   };
 
   const saveSettingsToStorage = (updatedSettings: StoreSettings) => {
@@ -223,6 +140,7 @@ export default function App() {
   const addReceipt = (receipt: Receipt) => {
     const updated = [receipt, ...receipts];
     saveReceiptsToStorage(updated);
+    api.saveReceipt(receipt);
   };
 
   // 5. Products Admin additions
@@ -285,6 +203,7 @@ export default function App() {
     };
 
     saveReturnsToStorage([newReturnRecord, ...returnLedgerHistory]);
+    api.saveReturn(newReturnRecord);
 
     // Step B: Replenish Products stock if returnedToStock flag is strictly checked
     const productsUpdated = products.map(prod => {
@@ -319,6 +238,8 @@ export default function App() {
     });
 
     saveReceiptsToStorage(receiptsUpdated);
+    const updatedReceipt = receiptsUpdated.find(r => r.receiptNumber === receiptNumber);
+    if (updatedReceipt) api.saveReceipt(updatedReceipt);
   };
 
   // 8. Wipe data settings

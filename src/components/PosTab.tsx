@@ -423,15 +423,37 @@ export default function PosTab({
     rawReceiptWindow.print();
   };
 
-  const handleSendEmailSimulation = () => {
-    if (!latestReceipt?.customerEmail && !customerEmail) {
+  const handleSendEmailSimulation = async () => {
+    const finalEmail = latestReceipt?.customerEmail || customerEmail;
+    if (!finalEmail) {
       alert('Please fill in a destination customer email address first.');
       return;
     }
+    
     setEmailStatus('sending');
-    setTimeout(() => {
+    
+    try {
+      const response = await fetch('http://localhost:3001/api/send-receipt', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email: finalEmail,
+          receipt: latestReceipt,
+          settings: settings
+        })
+      });
+
+      if (!response.ok) {
+        const errData = await response.json();
+        throw new Error(errData.error || 'Failed to send email');
+      }
+
       setEmailStatus('sent');
-    }, 1500);
+    } catch (error: any) {
+      console.error(error);
+      alert('Email dispatch failed: ' + error.message);
+      setEmailStatus('none');
+    }
   };
 
   return (
@@ -955,17 +977,17 @@ export default function PosTab({
 
       </div>
 
-      {/* POS AUTO-RECEIPT MODAL (THERMAL INOVICE SIMULATOR) */}
+      {/* POS AUTO-RECEIPT MODAL (THERMAL INVOICE SIMULATOR) */}
       {isReceiptModalOpen && latestReceipt && (
         <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 w-full max-w-md relative flex flex-col justify-between max-h-[90vh]">
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-2xl relative flex flex-col max-h-[92vh] shadow-2xl">
             
             {/* Modal Header */}
-            <div className="flex items-center justify-between pb-3.5 border-b border-slate-800">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-slate-800 shrink-0">
               <div className="flex items-center gap-2">
                 <CheckCircle2 className="h-5 w-5 text-teal-400 shrink-0" />
                 <h4 className="text-sm font-semibold text-slate-200">
-                  Transaction Authorized Successfully!
+                  Transaction Authorized — <span className="text-teal-400 font-mono">{latestReceipt.receiptNumber}</span>
                 </h4>
               </div>
               <button
@@ -974,139 +996,142 @@ export default function PosTab({
               >
                 <X className="h-4 w-4" />
               </button>
-                    {/* Simulated thermal slip layout */}
-            <div className="flex-1 overflow-y-auto py-6 px-1">
-              
-              {/* Thermal paper slip container */}
-              <div className="bg-white text-slate-950 p-5 rounded font-mono text-[11px] leading-relaxed shadow-lg border border-slate-200 w-full max-w-[320px] mx-auto relative text-left">
-                
-                {/* Visual paper tears zigzag accent top and bottom */}
-                <div className="absolute top-0 inset-x-0 h-1 bg-[linear-gradient(45deg,#cbd5e1_25%,transparent_25%),linear-gradient(-45deg,#cbd5e1_25%,transparent_25%)] bg-[size:6px_6px]" />
-                
-                {/* Store Header */}
-                <div className="text-center mt-3 mb-4 space-y-0.5">
-                  <h5 className="font-bold text-xs uppercase text-slate-900 tracking-tight">
-                    {settings.storeName}
-                  </h5>
-                  <p className="text-[10px] text-zinc-650">
-                    {settings.storeAddress}
-                  </p>
-                  <p className="text-[10px] text-zinc-650">
-                    Phone: {settings.storePhone}
-                  </p>
-                </div>
+            </div>
 
-                {/* Sales Metadata */}
-                <div className="border-t border-dashed border-slate-300 py-2.5 space-y-0.5 text-zinc-700">
-                  <p>Receipt ID: <span className="font-bold text-slate-900">{latestReceipt.receiptNumber}</span></p>
-                  <p>Timestamp: <span className="text-slate-900">{new Date(latestReceipt.date).toLocaleString()}</span></p>
-                  <p>Terminal: <span className="text-slate-900">Cashier Terminal #1</span></p>
-                  <p>Cashier Name: <span className="text-slate-900">{latestReceipt.cashierName}</span></p>
-                  {latestReceipt.customerName && (
-                    <p className="truncate">Customer: <span className="font-bold text-slate-900">{latestReceipt.customerName}</span></p>
-                  )}
-                  {latestReceipt.customerEmail && (
-                    <p className="truncate">Email: <span className="text-slate-900">{latestReceipt.customerEmail}</span></p>
-                  )}
-                </div>
+            {/* Scrollable receipt area */}
+            <div className="flex-1 overflow-y-auto px-6 py-5">
 
-                {/* Items listing table */}
-                <div className="border-t border-dashed border-slate-300 py-2.5">
-                  <div className="flex items-center justify-between text-[10px] font-bold pb-1 text-zinc-800">
-                    <span>Item Specifications</span>
-                    <span>Total Price</span>
-                  </div>
-                  <div className="space-y-1.5 divide-y divide-slate-100">
-                    {latestReceipt.items.map((item, idx) => (
-                      <div key={idx} className="pt-1.5 flex flex-col">
-                        <div className="flex justify-between items-start">
-                          <span className="font-bold text-slate-900">
-                            {item.name}
-                          </span>
-                          <span className="font-bold text-slate-900">
-                            {settings.currencySymbol}{item.finalPrice.toFixed(2)}
-                          </span>
-                        </div>
-                        <div className="flex justify-between text-[10px] text-zinc-505 pl-1">
-                          <span>
-                            {item.flavor} ({item.size})
-                          </span>
-                          <span>
-                            {item.quantity} x {settings.currencySymbol}{item.unitPrice.toFixed(2)}
-                            {item.discountPercentage > 0 ? ` (-${item.discountPercentage}%)` : ''}
-                          </span>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
+              {/* Thermal paper slip */}
+              <div className="bg-white text-slate-900 rounded-lg shadow-xl font-mono text-[12px] leading-relaxed relative mx-auto w-full max-w-xl">
 
-                {/* Computed cash ledger numbers */}
-                <div className="border-t border-dashed border-slate-300 py-2.5 space-y-1 text-zinc-700">
-                  <div className="flex justify-between">
-                    <span>Retail Subtotal:</span>
-                    <span className="text-slate-900">{settings.currencySymbol}{latestReceipt.subtotal.toFixed(2)}</span>
+                {/* Zigzag top edge */}
+                <div className="h-3 w-full" style={{background: 'repeating-linear-gradient(135deg, #f8fafc 0px, #f8fafc 5px, #e2e8f0 5px, #e2e8f0 10px)'}} />
+
+                <div className="px-8 pb-6 pt-4">
+
+                  {/* Store Header */}
+                  <div className="text-center mb-5 pb-4 border-b-2 border-dashed border-slate-300">
+                    <h2 className="font-black text-base uppercase tracking-widest text-slate-900">{settings.storeName}</h2>
+                    <p className="text-slate-500 text-[11px] mt-1">{settings.storeAddress}</p>
+                    <p className="text-slate-500 text-[11px]">Tel: {settings.storePhone} &nbsp;|&nbsp; {settings.storeEmail}</p>
                   </div>
 
-                  {latestReceipt.discountTotal > 0 && (
-                    <div className="flex justify-between font-bold text-emerald-855">
-                      <span>Total Savings:</span>
-                      <span className="text-emerald-700">-{settings.currencySymbol}{latestReceipt.discountTotal.toFixed(2)}</span>
+                  {/* Receipt Meta — 2 column grid */}
+                  <div className="grid grid-cols-2 gap-x-6 gap-y-1 mb-4 pb-4 border-b border-dashed border-slate-300 text-[11px]">
+                    <div>
+                      <span className="text-slate-400 uppercase tracking-wide text-[9px] font-bold block">Receipt No.</span>
+                      <span className="font-bold text-slate-900">{latestReceipt.receiptNumber}</span>
                     </div>
-                  )}
-
-                  <div className="flex justify-between text-[10px]">
-                    <span>Sales Tax ({settings.taxRatePercentage}%):</span>
-                    <span className="text-slate-900">{settings.currencySymbol}{latestReceipt.taxTotal.toFixed(2)}</span>
+                    <div>
+                      <span className="text-slate-400 uppercase tracking-wide text-[9px] font-bold block">Date & Time</span>
+                      <span className="text-slate-700">{new Date(latestReceipt.date).toLocaleString()}</span>
+                    </div>
+                    <div className="mt-1">
+                      <span className="text-slate-400 uppercase tracking-wide text-[9px] font-bold block">Cashier</span>
+                      <span className="text-slate-700">{latestReceipt.cashierName}</span>
+                    </div>
+                    <div className="mt-1">
+                      <span className="text-slate-400 uppercase tracking-wide text-[9px] font-bold block">Payment</span>
+                      <span className="font-bold text-slate-900 uppercase">{latestReceipt.paymentMethod}</span>
+                    </div>
+                    {latestReceipt.customerName && (
+                      <div className="mt-1">
+                        <span className="text-slate-400 uppercase tracking-wide text-[9px] font-bold block">Customer</span>
+                        <span className="text-slate-700">{latestReceipt.customerName}</span>
+                      </div>
+                    )}
+                    {latestReceipt.customerEmail && (
+                      <div className="mt-1 col-span-2">
+                        <span className="text-slate-400 uppercase tracking-wide text-[9px] font-bold block">Email</span>
+                        <span className="text-slate-700">{latestReceipt.customerEmail}</span>
+                      </div>
+                    )}
                   </div>
 
-                  <div className="flex justify-between text-xs font-bold text-slate-950 pt-2 border-t border-slate-200">
-                    <span>TOTAL AMOUNT DUE:</span>
-                    <span>{settings.currencySymbol}{latestReceipt.grandTotal.toFixed(2)}</span>
+                  {/* Items Table */}
+                  <div className="mb-4">
+                    {/* Table Header */}
+                    <div className="grid grid-cols-12 text-[9px] font-black uppercase tracking-widest text-slate-400 pb-2 border-b border-slate-200">
+                      <span className="col-span-5">Item</span>
+                      <span className="col-span-2 text-center">Qty</span>
+                      <span className="col-span-2 text-right">Unit</span>
+                      <span className="col-span-3 text-right">Total</span>
+                    </div>
+
+                    {/* Table Rows */}
+                    <div className="divide-y divide-slate-100">
+                      {latestReceipt.items.map((item, idx) => (
+                        <div key={idx} className="grid grid-cols-12 py-2.5 text-[11px]">
+                          <div className="col-span-5 pr-2">
+                            <p className="font-bold text-slate-900 leading-tight">{item.name}</p>
+                            <p className="text-[10px] text-slate-400">{item.flavor} · {item.size}</p>
+                            {item.discountPercentage > 0 && (
+                              <p className="text-[9px] text-emerald-600 font-bold">-{item.discountPercentage}% OFF</p>
+                            )}
+                          </div>
+                          <span className="col-span-2 text-center text-slate-700 self-center">{item.quantity}</span>
+                          <span className="col-span-2 text-right text-slate-700 self-center">{settings.currencySymbol}{item.unitPrice.toFixed(2)}</span>
+                          <span className="col-span-3 text-right font-bold text-slate-900 self-center">{settings.currencySymbol}{item.finalPrice.toFixed(2)}</span>
+                        </div>
+                      ))}
+                    </div>
                   </div>
-                </div>
 
-                {/* Payment checkout specification */}
-                <div className="border-t border-dashed border-slate-300 py-2.5 text-zinc-700">
-                  <p>Payment Authorized Method: <span className="font-bold uppercase text-slate-900">{latestReceipt.paymentMethod}</span></p>
-                  <p>Transaction ID: <span className="text-slate-900">tx_{Math.floor(200000 + Math.random() * 800000)}</span></p>
-                </div>
-
-                {/* Return policy note block footer */}
-                <div className="border-t border-dashed border-slate-300 pt-3 text-center text-[9px] text-zinc-500 space-y-1">
-                  <p className="font-bold italic text-zinc-700">
-                    "{settings.receiptThankYouNote}"
-                  </p>
-                  <p className="text-zinc-500">
-                    {settings.receiptReturnPolicy}
-                  </p>
-                  {/* barcode drawing mock rendering */}
-                  <div className="flex flex-col items-center justify-center pt-2.5">
-                    <span className="font-mono text-[9px] tracking-[6px] text-slate-900 font-bold">
-                      ||||| | |||| ||| | ||
-                    </span>
-                    <span className="text-[9px] text-zinc-500 font-mono tracking-wider">
-                      {latestReceipt.receiptNumber}
-                    </span>
+                  {/* Totals block */}
+                  <div className="border-t-2 border-dashed border-slate-300 pt-3 space-y-1.5 text-[11px]">
+                    <div className="flex justify-between text-slate-500">
+                      <span>Subtotal</span>
+                      <span>{settings.currencySymbol}{latestReceipt.subtotal.toFixed(2)}</span>
+                    </div>
+                    {latestReceipt.discountTotal > 0 && (
+                      <div className="flex justify-between text-emerald-600 font-bold">
+                        <span>Discounts Saved</span>
+                        <span>- {settings.currencySymbol}{latestReceipt.discountTotal.toFixed(2)}</span>
+                      </div>
+                    )}
+                    <div className="flex justify-between text-slate-500">
+                      <span>Tax ({settings.taxRatePercentage}%)</span>
+                      <span>{settings.currencySymbol}{latestReceipt.taxTotal.toFixed(2)}</span>
+                    </div>
+                    <div className="flex justify-between font-black text-base text-slate-900 pt-2 border-t-2 border-slate-900">
+                      <span>TOTAL PAID</span>
+                      <span>{settings.currencySymbol}{latestReceipt.grandTotal.toFixed(2)}</span>
+                    </div>
                   </div>
+
+                  {/* Footer note */}
+                  <div className="mt-5 pt-4 border-t border-dashed border-slate-300 text-center space-y-1.5">
+                    <p className="font-bold italic text-slate-600 text-[11px]">"{settings.receiptThankYouNote}"</p>
+                    <p className="text-slate-400 text-[10px] leading-relaxed">{settings.receiptReturnPolicy}</p>
+
+                    {/* Barcode simulation */}
+                    <div className="flex flex-col items-center pt-3">
+                      <div className="flex gap-px">
+                        {Array.from({length: 36}).map((_, i) => (
+                          <div key={i} className="bg-slate-900" style={{width: i % 3 === 0 ? 3 : i % 5 === 0 ? 1 : 2, height: 28}} />
+                        ))}
+                      </div>
+                      <p className="text-[9px] text-slate-400 mt-1 tracking-[4px] font-mono">{latestReceipt.receiptNumber}</p>
+                    </div>
+                  </div>
+
                 </div>
 
-                {/* Zigzag bottom line paper effect */}
-                <div className="absolute bottom-0 inset-x-0 h-1 bg-[linear-gradient(45deg,#cbd5e1_25%,transparent_25%),linear-gradient(-45deg,#cbd5e1_25%,transparent_25%)] bg-[size:6px_6px] rotate-180" />
+                {/* Zigzag bottom edge */}
+                <div className="h-3 w-full" style={{background: 'repeating-linear-gradient(45deg, #f8fafc 0px, #f8fafc 5px, #e2e8f0 5px, #e2e8f0 10px)'}} />
 
-              </div>      </div>
-
+              </div>
             </div>
 
             {/* Email send form inside modal overlay */}
-            <div className="mt-4 pt-4 border-t border-slate-800 space-y-3 shrink-0">
+            <div className="px-6 py-4 border-t border-slate-800 space-y-3 shrink-0 bg-slate-900 rounded-b-2xl">
               
               <div className="flex items-center gap-2">
                 <input
                   type="email"
                   value={latestReceipt.customerEmail || customerEmail}
                   onChange={(e) => setCustomerEmail(e.target.value)}
-                  placeholder="Enter custom customer email address..."
+                  placeholder="Enter customer email to send receipt..."
                   className="flex-1 bg-slate-950 border border-slate-800 focus:border-teal-500/60 rounded-lg text-slate-300 text-xs py-2 px-3 placeholder-slate-600 focus:outline-none"
                 />
                 
@@ -1114,33 +1139,28 @@ export default function PosTab({
                   type="button"
                   onClick={handleSendEmailSimulation}
                   disabled={emailStatus === 'sending'}
-                  className="px-3 py-2 bg-teal-500 text-slate-950 hover:bg-teal-400 font-bold transition-all text-xs rounded-lg flex items-center justify-center gap-1 shrink-0"
+                  className="px-4 py-2 bg-teal-500 text-slate-950 hover:bg-teal-400 font-bold transition-all text-xs rounded-lg flex items-center justify-center gap-1.5 shrink-0 disabled:opacity-60"
                 >
                   <Mail className="h-3.5 w-3.5" />
-                  <span>Send Receipt</span>
+                  <span>{emailStatus === 'sending' ? 'Sending...' : 'Send Receipt'}</span>
                 </button>
               </div>
 
-              {emailStatus === 'sending' && (
-                <p className="text-[10px] text-slate-400 animate-pulse font-mono">
-                  Connecting to SMTP relay server... Dispatched payload.
-                </p>
-              )}
               {emailStatus === 'sent' && (
-                <p className="text-[10px] text-emerald-400 font-mono font-bold">
-                  Receipt SMTP dispatch report: Emailed to customer successfully!
+                <p className="text-[10px] text-emerald-400 font-semibold flex items-center gap-1.5">
+                  <CheckCircle2 className="h-3.5 w-3.5" /> Receipt emailed to customer successfully!
                 </p>
               )}
 
               {/* Print and Close controls button line */}
-              <div className="flex items-center justify-end gap-2 mt-4 pt-1">
+              <div className="flex items-center justify-end gap-2 pt-1">
                 <button
                   type="button"
                   onClick={handlePrintMockup}
                   className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold rounded-lg border border-slate-700 hover:border-slate-600 transition-all flex items-center gap-1.5"
                 >
                   <Printer className="h-4 w-4" />
-                  <span>Physical Print Replica</span>
+                  <span>Print Receipt</span>
                 </button>
 
                 <button
@@ -1148,7 +1168,7 @@ export default function PosTab({
                   onClick={() => setIsReceiptModalOpen(false)}
                   className="px-4 py-2 bg-teal-500 hover:bg-teal-400 text-slate-950 text-xs font-bold rounded-lg transition-all"
                 >
-                  Ready for Next Sale
+                  Next Sale
                 </button>
               </div>
 

@@ -1,6 +1,5 @@
 {
   "name": "Velor POS for Supplements",
   "description": "Professional high-performance POS system for supplement shops to handle checkout, inventory, batch tracking, and automatic receipt workflows.",
-  "requestFramePermissions": [],
-  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+  "requestFramePermissions": []
 }

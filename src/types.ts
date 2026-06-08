@@ -96,4 +96,5 @@ export interface StoreSettings {
   currencySymbol: string;
   receiptThankYouNote: string;
   receiptReturnPolicy: string;
+  gmailAppPassword?: string;
 }
